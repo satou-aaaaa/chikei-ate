@@ -1,0 +1,16 @@
+{
+  "name": "地形あて",
+  "short_name": "地形あて",
+  "description": "山の名前と高さを読んで、地図の▲から当てる1日5問",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1ead8",
+  "theme_color": "#f1ead8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -140,7 +140,9 @@ async function solve(p, { wrong = 0 } = {}) {
 try {
   const p = await newPage();
   check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
-  await p.click("#howto-ok");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(100);
+  await p.reload(); await p.waitForTimeout(200);
+  check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない（shared-workflows #186）", await p.locator("#howto[open]").count() === 0 && (await mem(p)).tut === true);
   check("ホームに日本の地図と、今日の5問・とことん・上級・練習・山の手帳のボタン", await p.locator(".hero svg path").count() >= 47 && ["#go-d", "#go-e", "#go-h", "#go-p", "#go-dex", "#go-cal", "#go-ach"].every(Boolean) && (await p.textContent("#go-d")).includes("今日の5問"));
 
   // 地図：手がかりの都道府県の名前が出る（やさしい・ふつう）・むずかしいは出ない・▲は地図の中

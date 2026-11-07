@@ -233,13 +233,17 @@ try {
   check("ヒント1はその山の都道府県をぬる（▲は消さない）", await p.locator("#map .pf.hl").count() === hp && await p.locator(".ch.gone").count() === 0 && (await p.textContent("#hintbox")).includes("ぬりました"));
   await p.click("#hint");
   check("ヒント2はちがう▲を消して2つにしぼる・ヒントは2回まで", await p.locator(".ch.gone").count() === 2 && await p.locator("#hint:disabled").count() === 1);
+  await p.evaluate(() => { const c = __ca.cur(); [...document.querySelectorAll(".ch:not(:disabled)")].find((b) => c.P.opts[+b.dataset.j] !== c.P.ans).click(); });
+  await p.waitForTimeout(50);
+  check("ヒント2のあとに残ったまちがいを選ぶと、正解だけが残る（消した選び肢が戻らない。shared-workflows incidents/2026-11-07-hint-cut-comes-back.md）", await p.locator(".ch:not(:disabled)").count() === 1);
   await solve(p);
   check("ヒント2回は★1", (await p.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
   await p.click("#next");
+  check("次の問題へ進むと、フォーカスが問題（#qcard。山の名前・高さを読み上げる）に移る", await p.evaluate(() => { const a = document.activeElement; return !!a && a.id === "qcard" && /高さ \S+メートル/.test(a.getAttribute("aria-label") || "") && a.getAttribute("aria-label").includes(a.querySelector(".nm").firstChild.textContent); }));
   for (let i = 2; i < 5; i++) { await solve(p); await p.click("#next"); }
   await p.waitForTimeout(150);
   const s1 = await mem(p);
-  check("5問で結果：今日の記録に1問ごとのまちがい＋ヒント（1・2・0・0・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,2,0,0,0]");
+  check("5問で結果：今日の記録に1問ごとのまちがい＋ヒント（1・3・0・0・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,3,0,0,0]");
   const share = await p.textContent(".share");
   const names = G.dailyTags(TODAY).map((t) => G.BY[G.make(t).ans].name);
   check("シェアの文に山の名前（答え）を出さない（印だけ）", /第\d+回/.test(share) && /🟢/.test(share) && names.every((n) => !share.includes(n)), share);

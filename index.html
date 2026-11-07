@@ -169,7 +169,7 @@ html.a11y-cvd .map .pf.hl{fill:url(#hatch)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 :is(.icon,button,a,.mk):focus-visible{outline:3px solid #1a5fd0!important;outline-offset:2px}
 </style>
-<!-- a11y:begin 見やすさの設定 v5（shared-workflows template/a11y/a11y.html の写し。ここでは直さず、ひな形を直して全部のゲームへ写す。drift-check と qa/a11y.mjs が同じ中身か見る） -->
+<!-- a11y:begin 見やすさの設定 v6（shared-workflows template/a11y/a11y.html の写し。ここでは直さず、ひな形を直して全部のゲームへ写す。drift-check と qa/a11y.mjs が同じ中身か見る） -->
 <style id="a11y-css">
 /* だれでも：キーボードで選んだ所に太い枠（WCAG 2.4.7・2.4.13） */
 :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline:3px solid #1a5fd0!important;outline-offset:2px!important;box-shadow:0 0 0 5px #fff!important}
@@ -187,6 +187,7 @@ html:not(.a11y-ruby) ruby.a11y-rb>rt{display:none}
 /* 設定の画面（どのゲームでも同じ見た目・同じ濃さ。白地に黒で 15:1） */
 .a11y-dlg{max-width:min(420px,calc(100vw - 32px));width:100%;box-sizing:border-box;border:2px solid #1d2320;border-radius:14px;padding:18px 16px 14px;background:#fffdf8;color:#1d2320;font:500 16px/1.6 "BIZ UDPGothic","Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif;letter-spacing:0}
 .a11y-dlg::backdrop{background:#0008}
+.a11y-dlg:not([open]){display:none}
 .a11y-dlg h2{font-size:19px;margin:0 0 4px;font-weight:700;line-height:1.4}
 .a11y-dlg p{margin:4px 0 10px;font-size:14px;color:#3d4440;line-height:1.6}
 .a11y-dlg label{display:flex;gap:12px;align-items:center;min-height:48px;padding:6px 4px;border-top:1px solid #1d232022;cursor:pointer;line-height:1.4}
@@ -285,7 +286,8 @@ html.a11y-say body{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))!i
       set(k, e.target.checked);
       if (k === "say") dlg.querySelector("#a11y-novoice").hidden = !(e.target.checked && !voice());
     });
-    dlg.querySelector("[data-a11y-close]").addEventListener("click", () => dlg.close());
+    // dialog を知らないブラウザでは close が無いので、open を外して閉じ、フォーカスを戻す（v6。jitensha-rule #1・sekai-jikoku #1 の CodeRabbit）
+    dlg.querySelector("[data-a11y-close]").addEventListener("click", () => { if (dlg.close) dlg.close(); else { dlg.removeAttribute("open"); if (lastFocus && lastFocus.focus) lastFocus.focus(); } });
     dlg.addEventListener("close", () => { if (lastFocus && lastFocus.focus) lastFocus.focus(); });
     sayBtn = document.createElement("button");
     sayBtn.type = "button"; sayBtn.className = "a11y-saybtn"; sayBtn.textContent = "🔊 読む"; sayBtn.setAttribute("aria-label", "画面の問題を読み上げる");
@@ -369,7 +371,7 @@ function practiceList(s, lv, region) {
   return ids.map((id, i) => `${lv}:${id}|p${salt}:${i}`);
 }
 const starsOf = (m) => (m === 0 ? 3 : m === 1 ? 2 : 1); // m = まちがい＋ヒントの数
-const starStr = (n) => `<span class="stars" aria-label="星${n}つ">${"★".repeat(n)}<span class="off">${"☆".repeat(3 - n)}</span></span>`;
+const starStr = (n) => `<span class="stars" role="img" aria-label="星${n}つ">${"★".repeat(n)}<span class="off">${"☆".repeat(3 - n)}</span></span>`;
 
 // ---- 記録（この端末の localStorage だけ）----
 // days/hdays/adays：日付 → { m:[1問ごとのまちがい＋ヒント] }。adays はあとから遊んだ日（続けた日・今日の記録・Ko-fi には数えない）
@@ -641,7 +643,7 @@ function play() {
       ${run.mode === "e" ? `<span style="flex:1;font-size:.85rem;color:var(--ink2)">${label}　${i + 1}山目${s.ebest ? `（ベスト ${s.ebest}）` : ""}</span>`
         : `<div class="dots" aria-label="${i + 1}問目／${run.list.length}問">${run.list.map((_, j) => `<i class="${j < i ? "done" : j === i ? "on" : ""}"></i>`).join("")}</div><span style="font-size:.85rem;color:var(--ink2)">${label} ${i + 1}/${run.list.length}</span>`}
     </header>
-    <div class="qcard"><p class="ask">この山はどの▲？</p>
+    <div class="qcard" id="qcard" role="group" aria-label="この山はどの▲？ ${esc(A.name)}（${esc(A.yomi)}）・高さ ${A.e.toLocaleString("ja-JP")}メートル・${esc(G.prefStr(A))}"><p class="ask">この山はどの▲？</p>
       <p class="nm" data-a11y-say aria-label="${esc(A.name)}（${esc(A.yomi)}）はどの▲？">${esc(A.name)}<small>${esc(A.yomi)}</small></p>
       <div class="chips"><span data-a11y-say aria-label="高さ ${A.e.toLocaleString("ja-JP")}メートル">▲ ${A.e.toLocaleString("ja-JP")}m</span><span class="pf" data-a11y-say>${esc(G.prefStr(A))}</span></div></div>
     <div class="map" id="map"></div>
@@ -658,9 +660,13 @@ function play() {
   if ($("quit")) $("quit").onclick = () => { if (cur && cur.done) return; finish(); };
   paint();
   toTop();
+  // 画面を作り直すとフォーカスが body に戻るので、問題（山の名前・高さ・県）へ移す。手がかりを聞いてから選び肢へ進める（chikei-ate #3 の CodeRabbit）
+  { const q = $("qcard"); if (q) { q.tabIndex = -1; q.focus({ preventScroll: true }); } }
 }
 // ヒント1：その山の都道府県をぬって名前を出す。ヒント2：ちがう▲を2つ消して2つにしぼる
-const cutOf = () => { if (cur.hints < 2) return []; const left = cur.P.opts.filter((id) => id !== cur.P.ans && !cur.wrong.includes(id)); return left.slice(0, Math.max(0, left.length - 1)); };
+// ヒント2：まちがいの選び肢を消して、2つにしぼる（消すのは、正解でない選び肢のうち最後の1つ以外。まちがいの数で変えない。
+// 変えると、しぼったあとに残ったまちがいを選んだとき、消した選び肢が戻る。shared-workflows incidents/2026-11-07-hint-cut-comes-back.md）
+const cutOf = () => (cur.hints < 2 ? [] : cur.P.opts.filter((id) => id !== cur.P.ans).slice(0, -1));
 function paint() {
   const P = cur.P, cut = cutOf(), A = G.BY[P.ans];
   $("map").innerHTML = mapSvg(P, { wrong: cur.wrong, cut, ok: cur.done ? P.ans : null, hl: cur.hints >= 1 || cur.done ? A.p : null });
@@ -672,7 +678,7 @@ function paint() {
     if (ng) b.setAttribute("aria-label", `▲${+b.dataset.j + 1}（ちがう。${m.name}）`);
   });
   const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= 2; h.hidden = cur.done; }
-  $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(G.prefStr(A))}を黄色にぬりました。${cur.hints >= 2 ? "<br>💡 ちがう▲を消しました。のこりは2つです。" : ""}</div>` : "";
+  $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(G.prefStr(A))}を黄色にぬりました。${cur.hints >= 2 ? `<br>💡 ちがう▲を消しました。のこりは${cur.P.opts.filter((x) => !cutOf().includes(x) && !cur.wrong.includes(x)).length}つです。` : ""}</div>` : "";
 }
 function hint() { if (cur.done || cur.hints >= 2) return; cur.hints++; keep(); paint(); }
 function choose(j) {

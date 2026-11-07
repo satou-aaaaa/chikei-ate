@@ -414,15 +414,17 @@ function load() {
 const num = (v) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0);
 const okDate = (v) => { if (typeof v !== "string" || !/^\d{4}-\d\d-\d\d$/.test(v)) return false; const t = Date.parse(v + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v; };
 const okTag = (t) => { if (typeof t !== "string") return false; const m = t.match(/^([012]):(\d+)\|[\w:.-]+$/); return !!m && Object.prototype.hasOwnProperty.call(G.BY, m[2]); };
+// 1回の問題の数（今日の5問・上級）。これと数の合わない記録は終えた日にしない
+const NQ = { d: G.dailyTags(EPOCH).length, h: G.hardTags(EPOCH).length };
 function tidy(s) {
   s.ebest = num(s.ebest);
   for (const q of BOXES) if (!s[q] || typeof s[q] !== "object" || Array.isArray(s[q])) s[q] = {};
   for (const k in s.dex) { if (!Object.prototype.hasOwnProperty.call(G.BY, k)) delete s.dex[k]; else s.dex[k] = num(s.dex[k]); }
-  const okRec = (x) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.every((v) => Number.isInteger(v) && v >= 0);
-  for (const b of [s.days, s.hdays, s.adays]) for (const d in b) if (!okDate(d) || !okRec(b[d])) delete b[d];
+  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0);
+  for (const [b, n] of [[s.days, NQ.d], [s.hdays, NQ.h], [s.adays, NQ.d]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
-    if (typeof r !== "object" || !okDate(r.date) || !Array.isArray(r.list) || !r.list.length || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
+    if (typeof r !== "object" || !okDate(r.date) || (m === "a:" + r.date ? r.mode !== "a" : !["d", "h", "p", "e"].includes(m) || r.mode !== m) || !Array.isArray(r.list) || !r.list.length || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
     if (r.cur != null && (typeof r.cur !== "object" || !Array.isArray(r.cur.wrong))) r.cur = null;
     else if (r.cur) { r.cur.hints = Math.min(2, num(r.cur.hints)); r.cur.wrong = r.cur.wrong.filter((w) => Number.isInteger(w)); }
   }
@@ -507,8 +509,15 @@ function mapSvg(P, st) {
       if (!m) return "";
       at = [m.x, m.y + s * 2.4];
     }
-    const w = name.length * fs * 1.05, b = [at[0] - w / 2, at[1] - fs * 0.85, at[0] + w / 2, at[1] + fs * 0.3];
-    if (!must.has(i) && hit(b)) return "";
+    const w = name.length * fs * 1.05, box = (q) => [q[0] - w / 2, q[1] - fs * 0.9, q[0] + w / 2, q[1] + fs * 0.25];
+    let b = box(at);
+    if (hit(b)) {
+      if (!must.has(i)) return "";
+      // 手がかりの名前どうしが重なるときは、近くの空いた所へずらす（2026-11-07 CodeRabbit：山梨と静岡が重なった）
+      const dy = fs * 1.2, dx = w * 0.6;
+      const q = [[0, dy], [0, -dy], [dx, 0], [-dx, 0], [dx, dy], [-dx, dy], [dx, -dy], [-dx, -dy], [0, 2 * dy], [0, -2 * dy], [2 * dx, 0], [-2 * dx, 0]].map(([x, y]) => [at[0] + x, at[1] + y]).find((c) => !hit(box(c)));
+      if (q) { at = q; b = box(at); }
+    }
     boxes.push(b);
     return `<text class="lb" x="${at[0]}" y="${at[1]}" font-size="${fs.toFixed(1)}" stroke-width="${(3 * u).toFixed(1)}" text-anchor="middle">${name}</text>`;
   }).join("");
@@ -594,14 +603,14 @@ function startRun(mode, opt) {
       const ra = s.runs[runKey("a", opt)];
       if (!lateDays(s, k).includes(opt)) { ng = true; return; } // 期限は続きからより先に確かめる
       if (ra && ra.date === opt && !doneOf(ra)) return;
-      s.runs[runKey("a", opt)] = { mode, date: opt, list: G.dailyTags(opt), res: [], cur: null, id: "a" + opt, a0: achGot(s) };
+      s.runs[runKey("a", opt)] = { mode, date: opt, list: G.dailyTags(opt), res: [], cur: null, id: "a" + opt };
       return;
     }
-    if (mode === "e") { if (s.runs.e) return; s.runs.e = { mode, date: k, list: endlessList(s, s.elast), res: [], miss: 0, cur: null, id: rid(), a0: achGot(s) }; return; }
+    if (mode === "e") { if (s.runs.e) return; s.runs.e = { mode, date: k, list: endlessList(s, s.elast), res: [], miss: 0, cur: null, id: rid() }; return; }
     if (mode !== "p" && s.runs[mode] && s.runs[mode].date === k) return; // 続きから
     if ((mode === "d" && s.days[k]) || (mode === "h" && s.hdays[k])) return; // 別のタブで今日の分を終えていたら、もう一度は始めない
     const list = mode === "p" ? practiceList(s, opt.lv, opt.region) : listOf(mode, k);
-    s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s) };
+    s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid() };
   });
   if (ng) return cal();
   MODE = runKey(mode, opt);
@@ -632,9 +641,9 @@ function play() {
     </header>
     <div class="qcard"><p class="ask">この山はどの▲？</p>
       <p class="nm" data-a11y-say aria-label="${esc(A.name)}（${esc(A.yomi)}）はどの▲？">${esc(A.name)}<small>${esc(A.yomi)}</small></p>
-      <div class="chips"><span>▲ ${A.e.toLocaleString("ja-JP")}m</span><span class="pf">${esc(G.prefStr(A))}</span></div></div>
+      <div class="chips"><span data-a11y-say aria-label="高さ ${A.e.toLocaleString("ja-JP")}メートル">▲ ${A.e.toLocaleString("ja-JP")}m</span><span class="pf" data-a11y-say>${esc(G.prefStr(A))}</span></div></div>
     <div class="map" id="map"></div>
-    <div class="choices" id="choices">${P.opts.map((id, j) => `<button class="ch" data-j="${j}" aria-label="▲${j + 1}（${placeOf(P, id)}）">▲${j + 1}<small></small></button>`).join("")}</div>
+    <div class="choices" id="choices">${P.opts.map((id, j) => `<button class="ch" data-j="${j}" aria-label="▲${j + 1}（${placeOf(P, id)}${P.labels ? "・" + esc(G.prefStr(G.BY[id])) : ""}）">▲${j + 1}<small></small></button>`).join("")}</div>
     <p class="msg" id="msg" role="status" aria-live="polite"></p>
     <div id="hintbox"></div>
     ${hard ? "" : `<button class="sub" id="hint">ヒント</button>`}
@@ -678,9 +687,10 @@ function choose(j) {
   }
   // 正解
   cur.done = true; buzz([10, 40, 10]);
-  const mm = missOf(), st = starsOf(mm), P = cur.P, A = G.BY[P.ans];
-  const s = save((s) => { const r = s.runs[MODE]; if (!same(r)) return; r.res.push({ m: mm }); r.cur = null; if (r.mode === "e") { r.miss = (r.miss || 0) + mm; s.elast = P.ans; } s.dex[P.ans] = (s.dex[P.ans] || 0) + 1; });
-  const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
+  const P = cur.P, A = G.BY[P.ans];
+  // 別のタブで使ったヒント・まちがいも数えてから採点する（keep と同じ合わせ方）
+  const s = save((s) => { const r = s.runs[MODE]; if (!same(r)) return; const was = r.cur && r.cur.i === cur.i && r.cur.tag === cur.tag ? r.cur : { wrong: [], hints: 0 }; cur.hints = Math.max(cur.hints, num(was.hints)); for (const w of was.wrong || []) if (!cur.wrong.includes(w)) cur.wrong.push(w); r.res.push({ m: missOf() }); r.cur = null; if (r.mode === "e") { r.miss = (r.miss || 0) + missOf(); s.elast = P.ans; } s.dex[P.ans] = (s.dex[P.ans] || 0) + 1; });
+  const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length, st = starsOf(missOf());
   paint();
   $("msg").className = "msg"; $("msg").textContent = "";
   $("after").innerHTML = `<div class="verdict" role="status">
@@ -701,7 +711,7 @@ function finish() {
   save((s2) => {
     first = bank(s2, run);
     const c = s2.runs[MODE]; if (c && c.date === run.date && c.id === run.id) s2.runs[MODE] = null; // 別のタブで新しい回が始まっていたら、それは消さない
-    if (Array.isArray(run.a0)) newAch = achGot(s2).filter((id) => !run.a0.includes(id) && !s2.ach[id]);
+    newAch = achGot(s2).filter((id) => !s2.ach[id]); // まだ知らせていない実績は、前の回で取ったものも知らせる（結果を見ずに戻っても失わない）
     for (const id of newAch) s2.ach[id] = 1;
   });
   if (run.mode === "p") return result("p", run.date, false, { list: run.list, ...rec }, newAch);
@@ -710,7 +720,7 @@ function finish() {
 // とことんの終わり：当てた数を自己ベストと比べる（他の人との順位は出さない）
 function endFinish(run) {
   const n = run.res.length, miss = num(run.miss); let prev = 0, newAch = [];
-  save((s2) => { prev = s2.ebest || 0; s2.ebest = Math.max(prev, n); const c = s2.runs.e; if (c && c.id === run.id) s2.runs.e = null; if (Array.isArray(run.a0)) newAch = achGot(s2).filter((id) => !run.a0.includes(id) && !s2.ach[id]); for (const id of newAch) s2.ach[id] = 1; });
+  save((s2) => { prev = s2.ebest || 0; s2.ebest = Math.max(prev, n); const c = s2.runs.e; if (c && c.id === run.id) s2.runs.e = null; newAch = achGot(s2).filter((id) => !s2.ach[id]); for (const id of newAch) s2.ach[id] = 1; });
   const s = load(), best = n > prev && n > 0;
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="ホームへ">←</button><h1>地形あて<small>とことん</small></h1></header>

@@ -21,13 +21,16 @@ const MAP = globalThis.CHIKEI_MAP;
 // ---- 1. 山のデータ・問題の作り方（ブラウザを使わない）----
 {
   const csv = readFileSync(path.join(root, "tools", "gsi-1003zan-20260331.csv"), "utf8");
-  check("山は国土地理院の1003山（同じ索引番号の峰は1つにまとめる）が全部ある", G.M.length >= 900 && G.M.length <= 1003 && new Set(G.IDS).size === G.M.length, `${G.M.length}山`);
+  const csvIds = [...new Set(csv.trim().split(/\r?\n/).slice(1).map((l) => +l.split(",")[1].split("-")[0]))].sort((a, b) => a - b);
+  check("山は国土地理院の1003山（同じ索引番号の峰は1つにまとめる）が全部ある：索引番号が元の表と1つずつ同じ", csvIds.length === 1003 && JSON.stringify([...G.IDS].sort((a, b) => a - b)) === JSON.stringify(csvIds), `${G.M.length}山`);
+  const dirty = G.M.filter((m) => [m.name, m.yomi, m.alt, m.altY, m.peak, m.peakY].some((t) => /[?？\[\]［］]/.test(t || "")));
+  check("山の名前に「?」（Shift_JIS に無かった字）や注記の括弧が残っていない（2026-11-07 CodeRabbit）", dirty.length === 0 && !/\?/.test(csv), dirty.slice(0, 5).map((m) => m.id + m.name).join(","));
   const fuji = G.M.find((m) => m.name === "富士山");
   check("富士山：3776m・山梨県と静岡県・高さ1番目（元の表の値と同じ）", fuji && fuji.e === 3776 && fuji.p.join() === "18,21" && fuji.rank === 1 && /富士山.*3776/.test(csv.replace(/[,"\s]+/g, " ")));
   const bad = G.M.filter((m) => !m.name || !m.yomi || !(m.e > 0 && m.e < 3800) || !m.p.length || m.p.some((c) => !(c >= 0 && c < 47)) || !Number.isFinite(m.x) || !Number.isFinite(m.y) || !(m.kind >= 0 && m.kind <= 2));
   check("どの山にも名前・よみ・高さ・都道府県・場所・高さの種類がある", bad.length === 0, bad.slice(0, 5).map((m) => m.id).join(","));
-  const ranks = G.M.map((m) => m.rank).sort((a, b) => a - b);
-  check("高さの順位は1から始まり、高いほど小さい", ranks[0] === 1 && G.M.every((a) => G.M.every((b) => !(a.e > b.e && a.rank > b.rank))));
+  const rbad = G.M.filter((a) => a.rank !== 1 + G.M.filter((b) => b.e > a.e).length);
+  check("高さの順位は「自分より高い山の数＋1」（同じ高さは同じ順位）", rbad.length === 0, rbad.slice(0, 5).map((m) => m.id).join(","));
   check("都道府県の地図は47（どれにも形と名前の位置がある）", MAP.length === 47 && MAP.every((p) => /^M[\d.\s\-MZ]+Z$/.test(p.d) && p.l.length === 2));
 }
 {
@@ -99,14 +102,15 @@ check("引き継ぎ：transfer.js をゲームの script より前に、この�
 check("README の URL のすぐ後ろに全角の字を続けない（Link check が URL の一部と読む）", !/https?:\/\/[\x21-\x7e]*[^\x00-\x7f]/.test(readFileSync(path.join(root, "README.md"), "utf8").replace(/\]\(https?:\/\/[^)\s]+\)/g, "").replace(/<https?:\/\/[^>\s]+>/g, "")));
 { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
-  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、外へ何も送らない", ["./index.html", "./data.js", "./map.js", "./game.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
-  check("PWA：manifest にアイコン2つと名前がある", mf.name === "地形あて" && mf.icons.length >= 2 && mf.start_url === "./"); }
+  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、外へ何も送らない", ["./index.html", "./data.js", "./map.js", "./game.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  check("PWA：manifest にアイコン2つと名前がある", mf.name === "地形あて" && mf.icons.length >= 2 && mf.start_url === "./");
+  check("PWA：maskable は字が切れないよう専用の絵（icon-maskable-512.png、中を縮めた絵）を使う", mf.icons.filter((i) => /maskable/.test(i.purpose || "")).every((i) => i.src === "icon-maskable-512.png") && existsSync(path.join(root, "icon-maskable-512.png"))); }
 
 // ---- 3. ブラウザで遊ぶ ----
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 const server = createServer((rq, res) => {
   const p = decodeURIComponent(new URL(rq.url, "http://x").pathname), f = path.join(root, p === "/" ? "index.html" : p);
-  if (!f.startsWith(root) || !existsSync(f)) { res.writeHead(404); return res.end(); }
+  if ((f !== root && !f.startsWith(root + path.sep)) || !existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "content-type": TYPES[path.extname(f)] || "application/octet-stream" }); res.end(readFileSync(f));
 }).listen(0);
 const url = `http://127.0.0.1:${server.address().port}/`;
@@ -143,26 +147,30 @@ try {
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
   await p.reload(); await p.waitForTimeout(200);
   check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない（shared-workflows #186）", await p.locator("#howto[open]").count() === 0 && (await mem(p)).tut === true);
-  check("ホームに日本の地図と、今日の5問・とことん・上級・練習・山の手帳のボタン", await p.locator(".hero svg path").count() >= 47 && ["#go-d", "#go-e", "#go-h", "#go-p", "#go-dex", "#go-cal", "#go-ach"].every(Boolean) && (await p.textContent("#go-d")).includes("今日の5問"));
+  check("ホームに日本の地図と、今日の5問・とことん・上級・練習・山の手帳のボタン", await p.locator(".hero svg path").count() >= 47 && (await Promise.all(["#go-d", "#go-e", "#go-h", "#go-p", "#go-dex", "#go-cal", "#go-ach"].map(async (q) => (await p.locator(q).count()) === 1 && (await p.locator(q).isVisible()) && (await p.locator(q).isEnabled())))).every(Boolean) && (await p.textContent("#go-d")).includes("今日の5問"));
 
   // 地図：手がかりの都道府県の名前が出る（やさしい・ふつう）・むずかしいは出ない・▲は地図の中
   {
     const r = await p.evaluate(() => {
       const G = __ca.G, out = { bad: [], n: 0 };
-      for (let i = 0; i < 400; i++) {
-        const id = G.IDS[(i * 7) % G.IDS.length], lv = i % 3, P = G.make(`${lv}:${id}|map${i}`);
-        const d = document.createElement("div"); d.innerHTML = __ca.mapSvg(P, {});
+      for (let i = 0; i < 1500; i++) {
+        const id = G.IDS[(i * 7) % G.IDS.length], lv = i % 3, P = i === 0 ? { tag: "fuji-wide", lv: 0, ans: 1, opts: [368, 1, 707, 998], labels: true } : G.make(`${lv}:${id}|map${i}`);
+        const d = document.createElement("div"); d.style.width = "340px"; d.innerHTML = __ca.mapSvg(P, {}); document.body.appendChild(d);
         const names = [...d.querySelectorAll("text.lb")].map((t) => t.textContent), vb = d.querySelector("svg").getAttribute("viewBox").split(" ").map(Number);
         const want = P.opts.flatMap((x) => G.BY[x].p).map((c) => G.PREFS[c].replace(/[都府県]$/, ""));
         if (lv < 2 && !want.every((w) => names.includes(w))) out.bad.push(P.tag + " 名前が足りない");
         if (lv === 2 && names.length) out.bad.push(P.tag + " むずかしいのに名前");
         if (P.opts.some((x) => { const m = G.BY[x]; return m.x < vb[0] || m.x > vb[0] + vb[2] || m.y < vb[1] || m.y > vb[1] + vb[3]; })) out.bad.push(P.tag + " ▲が地図の外");
         if (d.querySelectorAll(".mk").length !== 4) out.bad.push(P.tag + " ▲の数");
+        // 手がかりの名前どうしが重ならない（字の形の高さ＝行の高さの7割で見る。2026-11-07 CodeRabbit：山梨と静岡が重なった）
+        const bx = [...d.querySelectorAll("text.lb")].filter((t) => want.includes(t.textContent)).map((t) => { const r = t.getBBox(); return [t.textContent, r.x, r.y + r.height * 0.15, r.x + r.width, r.y + r.height * 0.85]; });
+        for (let a = 0; a < bx.length; a++) for (let c = a + 1; c < bx.length; c++) if (bx[a][1] < bx[c][3] && bx[c][1] < bx[a][3] && bx[a][2] < bx[c][4] && bx[c][2] < bx[a][4]) out.bad.push(P.tag + ` ${bx[a][0]}と${bx[c][0]}が重なる`);
+        d.remove();
         out.n++;
       }
       return out;
     });
-    check(`地図（${r.n}問）：やさしい・ふつうは4つの山の都道府県の名前が必ず出る・むずかしいは名前なし・▲4つは地図の中`, r.bad.length === 0, r.bad.slice(0, 5).join(" / "));
+    check(`地図（${r.n}問）：やさしい・ふつうは4つの山の都道府県の名前が必ず出て重ならない・むずかしいは名前なし・▲4つは地図の中`, r.bad.length === 0, r.bad.slice(0, 5).join(" / "));
   }
 
   // 今日の5問：1問目はまちがえる、2問目はヒント2回、ほかはそのまま
@@ -170,7 +178,12 @@ try {
   const tags = await p.evaluate(() => __ca.load().runs.d.list);
   check("今日の5問は日付から決まる（game.js の dailyTags と同じ）", JSON.stringify(tags) === JSON.stringify(G.dailyTags(TODAY)));
   check("問題の画面：山の名前・高さ・都道府県と、地図の▲4つ・大きなボタン4つ", await p.locator(".qcard .nm").count() === 1 && (await p.textContent(".qcard .chips")).includes("m") && await p.locator("#map .mk").count() === 4 && await p.locator(".ch").count() === 4 && (await p.$$eval(".ch", (b) => b.map((x) => x.getBoundingClientRect().height))).every((h) => h >= 56));
-  check("ボタンには地図のどこかを言う名前がある（答えは言わない）", (await p.$$eval(".ch", (b) => b.map((x) => x.getAttribute("aria-label")))).every((t) => /^▲\d（地図の/.test(t)));
+  {
+    const lab = await p.$$eval(".ch", (b) => b.map((x) => x.getAttribute("aria-label"))), P0 = await p.evaluate(() => __ca.cur().P);
+    check("ボタンには地図のどこかを言う名前がある（山の名前＝答えは言わない。名前を出す難しさでは都道府県も言う）", lab.every((t, j) => { const m = G.BY[P0.opts[j]]; return /^▲\d（地図の/.test(t) && !t.includes(m.name) && t.includes(G.prefStr(m)) === !!P0.labels; }), lab.join(" / "));
+    const say = await p.$$eval("[data-a11y-say]", (e) => e.map((x) => x.getAttribute("aria-label") || x.textContent).join(" "));
+    check("「読む」で山の名前・高さ・都道府県を読む", say.includes(P0 && G.BY[P0.ans].name) && /高さ [\d,]+メートル/.test(say) && say.includes(G.prefStr(G.BY[P0.ans])));
+  }
   const wj = await wrongIdx(p);
   await p.click(`.ch[data-j="${wj}"]`);
   const wname = await p.evaluate((j) => __ca.G.BY[__ca.cur().P.opts[j]].name, wj);
@@ -183,6 +196,7 @@ try {
   await p.waitForSelector(".verdict");
   check("地図の▲を押しても答えられる。正解は ✓・説明・★2（まちがい1回）", await p.locator(".ch.ok").count() === 1 && (await p.textContent(".verdict")).includes("1003山のうち") && (await p.getAttribute(".verdict .stars", "aria-label")) === "星2つ");
   check("正解したらヒントのボタンは隠れる", await p.locator("#hint").isHidden());
+  check("正解の知らせは .verdict（role=status）に「✓ 正解」と山の名前", (await p.getAttribute(".verdict", "role")) === "status" && /✓ 正解/.test(await p.textContent(".verdict .hd")) && (await p.textContent(".verdict .mn")).length > 0);
   await p.click("#next");
   await p.click("#hint");
   const hp = await p.evaluate(() => __ca.G.BY[__ca.cur().P.ans].p.length);
@@ -240,12 +254,27 @@ try {
   {
     // 引き継ぎコードなどで数の所に文字が入っても、画面に HTML として出さない
     const q = await newPage(); await closeHow(q);
-    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("chikei-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.dex = { 368: '"><b id="xss2">', bad: 3 }; s.runs = { e: { mode: "e", id: "x", date: "2026-11-08", list: ["0:368|e1:0"], res: [], miss: '"><i id="xss3">' }, h: { list: "bad", res: [] }, p: { mode: "p", id: "y", date: "2026-11-08", list: ["0:99999|p"], res: [] }, d: { mode: "d", id: "z", date: "x", list: ["0:368|d"], res: [] }, a1: { mode: "a", id: "a1", date: "2026-11-08", list: ["0:368|d"], res: [null] }, a3: { mode: "a", id: "a3", date: "2026-11-08", list: ["0:368|d", "1:368|d"], res: [{ m: 0 }], cur: { i: 1, tag: "1:368|d", wrong: "x", hints: 0 } } }; s.days = { "2026-11-08": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] } }; localStorage.setItem("chikei-v1", JSON.stringify(s)); });
+    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("chikei-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.dex = { 368: '"><b id="xss2">', bad: 3 }; s.runs = { e: { mode: "e", id: "x", date: "2026-11-08", list: ["0:368|e1:0"], res: [], miss: '"><i id="xss3">' }, h: { list: "bad", res: [] }, p: { mode: "p", id: "y", date: "2026-11-08", list: ["0:99999|p"], res: [] }, d: { mode: "d", id: "z", date: "x", list: ["0:368|d"], res: [] }, a1: { mode: "a", id: "a1", date: "2026-11-08", list: ["0:368|d"], res: [null] }, x: { mode: "x", id: "x1", date: "2026-11-08", list: ["0:368|d"], res: [{ m: 0 }] }, h2: { mode: "d", id: "h2", date: "2026-11-08", list: ["0:368|d"], res: [] }, "a:2026-11-08": { mode: "a", id: "a3", date: "2026-11-08", list: ["0:368|d", "1:368|d"], res: [{ m: 0 }], cur: { i: 1, tag: "1:368|d", wrong: "x", hints: 0 } } }; s.days = { "2026-11-08": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] }, "2026-11-09": { m: [] }, "2026-11-10": { m: [0, 0, 0] } }; s.hdays = { "2026-11-09": { m: [0, 1, 0] }, "2026-11-10": { m: [0, 0, 0, 0, 0] } }; localStorage.setItem("chikei-v1", JSON.stringify(s)); });
     await q.reload(); await q.waitForTimeout(250);
     const st = await q.evaluate(() => __ca.load());
-    check("記録の形を直す：数の所の文字は0に・知らない山と形のちがう途中経過・日ごとの記録は捨てる", st.ebest === 0 && st.dex[368] === 0 && !("bad" in st.dex) && !("h" in st.runs) && !("p" in st.runs) && !("d" in st.runs) && !("a1" in st.runs) && st.runs.a3 && st.runs.a3.cur === null && Object.keys(st.days).length === 0);
+    check("記録の形を直す：数の所の文字は0に・知らない山と形のちがう途中経過・置き場とモードの合わない途中経過・問題の数と合わない日ごとの記録は捨てる", st.ebest === 0 && st.dex[368] === 0 && !("bad" in st.dex) && !("h" in st.runs) && !("p" in st.runs) && !("d" in st.runs) && !("a1" in st.runs) && !("x" in st.runs) && !("h2" in st.runs) && st.runs["a:2026-11-08"] && st.runs["a:2026-11-08"].cur === null && Object.keys(st.days).length === 0 && JSON.stringify(Object.keys(st.hdays)) === '["2026-11-09"]');
     await q.click("#go-e").catch(() => {}); await q.waitForTimeout(150); await q.click("#quit").catch(() => {}); await q.waitForTimeout(150);
     check("記録の文字を HTML として出さない", await q.locator("#xss, #xss2, #xss3").count() === 0);
+    await q.context().close();
+  }
+  {
+    // 練習で50山目を当て、結果を見ずに戻って練習をやり直しても、次の結果で「50山」を知らせる（2026-11-07 CodeRabbit）
+    const q = await newPage(); await closeHow(q);
+    await q.evaluate((ids) => { const s = JSON.parse(localStorage.getItem("chikei-v1")) || { v: 1 }; s.dex = {}; for (const id of ids) s.dex[id] = 1; s.ach = {}; localStorage.setItem("chikei-v1", JSON.stringify(s)); }, G.IDS.slice(0, 50));
+    await q.reload(); await q.waitForTimeout(150); await closeHow(q);
+    await q.click("#go-p"); await q.click('[data-t="0"]');
+    for (let i = 0; i < 5; i++) { await solve(q); await q.click("#next"); }
+    await q.waitForTimeout(150);
+    check("前の回で取って知らせていない実績も、次の結果で知らせる（知らせたら二度は出さない）", (await q.textContent("#achnew").catch(() => "")).includes("50山") && (await mem(q)).ach.f50 === 1);
+    await q.click("#back").catch(() => {}); await q.click("#go-p"); await q.click('[data-t="0"]');
+    for (let i = 0; i < 5; i++) { await solve(q); await q.click("#next"); }
+    await q.waitForTimeout(150);
+    check("知らせ終えた実績は次の結果に出さない", !(await q.textContent("#achnew").catch(() => "")).includes("50山"));
     await q.context().close();
   }
   // 実績・このゲームについて
@@ -306,6 +335,9 @@ try {
     await a.click("#hint"); await a.click("#hint");
     await b.click("#hint");
     check("別のタブで使ったヒントの数を減らさない", (await mem(a)).runs.d.cur.hints === 2);
+    // 別のタブでヒントを使ったあと、こちらのタブですぐ正解しても、そのヒントを数える（2026-11-07 CodeRabbit）
+    await b.click(`.ch[data-j="${await ansIdx(b)}"]`); await b.waitForTimeout(150);
+    check("別のタブで使ったヒントは、こちらで正解しても★に数える", (await mem(a)).runs.d.res[1]?.m === 2 && (await b.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
     await ctx.close();
   }
 
@@ -343,9 +375,13 @@ try {
   {
     const q = await newPage(); await closeHow(q);
     await q.focus("#go-d"); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
-    const j = await ansIdx(q);
-    await q.focus(`.ch[data-j="${j}"]`); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
-    check("キーボードだけで選んで答えられる", await q.locator(".verdict").count() === 1);
+    const j = await ansIdx(q), seen = [];
+    for (let t = 0; t < 40 && !seen.includes(String(j)); t++) { await q.keyboard.press("Tab"); const d = await q.evaluate(() => document.activeElement && document.activeElement.classList.contains("ch") ? document.activeElement.dataset.j : null); if (d != null && !seen.includes(d)) seen.push(d); }
+    for (let t = 0; t < 40 && seen.length < 4; t++) { await q.keyboard.press("Tab"); const d = await q.evaluate(() => document.activeElement && document.activeElement.classList.contains("ch") ? document.activeElement.dataset.j : null); if (d != null && !seen.includes(d)) seen.push(d); }
+    check("Tab で4つのボタン全部に届く", seen.length === 4, seen.join(","));
+    for (let t = 0; t < 40 && (await q.evaluate(() => document.activeElement && document.activeElement.dataset.j)) !== String(j); t++) await q.keyboard.press("Tab");
+    await q.keyboard.press("Enter"); await q.waitForTimeout(100);
+    check("キーボードだけ（Tab と Enter）で選んで答えられる", await q.locator(".verdict").count() === 1);
     await q.context().close();
   }
 } catch (e) { check("ブラウザでの検査が最後まで動く", false, e.stack.split("\n").slice(0, 3).join(" ")); }

@@ -239,7 +239,7 @@ try {
   await solve(p);
   check("ヒント2回は★1", (await p.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
   await p.click("#next");
-  check("次の問題へ進むと、フォーカスが問題（#map）に移る", await p.evaluate(() => document.activeElement && document.activeElement.id) === "map");
+  check("次の問題へ進むと、フォーカスが問題（#qcard。山の名前・高さを読み上げる）に移る", await p.evaluate(() => { const a = document.activeElement; return !!a && a.id === "qcard" && /高さ \S+メートル/.test(a.getAttribute("aria-label") || "") && a.getAttribute("aria-label").includes(a.querySelector(".nm").firstChild.textContent); }));
   for (let i = 2; i < 5; i++) { await solve(p); await p.click("#next"); }
   await p.waitForTimeout(150);
   const s1 = await mem(p);

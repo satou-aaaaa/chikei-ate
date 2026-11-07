@@ -11,7 +11,7 @@ updates:
         patterns: ["*"]
   # npm を使うときだけ残す（directory はリポジトリに合わせる）
   - package-ecosystem: "npm"
-    directory: "/"
+    directory: "/qa"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 2

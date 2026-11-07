@@ -371,7 +371,7 @@ function practiceList(s, lv, region) {
   return ids.map((id, i) => `${lv}:${id}|p${salt}:${i}`);
 }
 const starsOf = (m) => (m === 0 ? 3 : m === 1 ? 2 : 1); // m = まちがい＋ヒントの数
-const starStr = (n) => `<span class="stars" aria-label="星${n}つ">${"★".repeat(n)}<span class="off">${"☆".repeat(3 - n)}</span></span>`;
+const starStr = (n) => `<span class="stars" role="img" aria-label="星${n}つ">${"★".repeat(n)}<span class="off">${"☆".repeat(3 - n)}</span></span>`;
 
 // ---- 記録（この端末の localStorage だけ）----
 // days/hdays/adays：日付 → { m:[1問ごとのまちがい＋ヒント] }。adays はあとから遊んだ日（続けた日・今日の記録・Ko-fi には数えない）

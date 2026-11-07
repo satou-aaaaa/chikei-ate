@@ -643,7 +643,7 @@ function play() {
       ${run.mode === "e" ? `<span style="flex:1;font-size:.85rem;color:var(--ink2)">${label}　${i + 1}山目${s.ebest ? `（ベスト ${s.ebest}）` : ""}</span>`
         : `<div class="dots" aria-label="${i + 1}問目／${run.list.length}問">${run.list.map((_, j) => `<i class="${j < i ? "done" : j === i ? "on" : ""}"></i>`).join("")}</div><span style="font-size:.85rem;color:var(--ink2)">${label} ${i + 1}/${run.list.length}</span>`}
     </header>
-    <div class="qcard"><p class="ask">この山はどの▲？</p>
+    <div class="qcard" id="qcard" role="group" aria-label="この山はどの▲？ ${esc(A.name)}（${esc(A.yomi)}）・高さ ${A.e.toLocaleString("ja-JP")}メートル・${esc(G.prefStr(A))}"><p class="ask">この山はどの▲？</p>
       <p class="nm" data-a11y-say aria-label="${esc(A.name)}（${esc(A.yomi)}）はどの▲？">${esc(A.name)}<small>${esc(A.yomi)}</small></p>
       <div class="chips"><span data-a11y-say aria-label="高さ ${A.e.toLocaleString("ja-JP")}メートル">▲ ${A.e.toLocaleString("ja-JP")}m</span><span class="pf" data-a11y-say>${esc(G.prefStr(A))}</span></div></div>
     <div class="map" id="map"></div>
@@ -660,8 +660,8 @@ function play() {
   if ($("quit")) $("quit").onclick = () => { if (cur && cur.done) return; finish(); };
   paint();
   toTop();
-  // 画面を作り直すとフォーカスが body に戻るので、問題へ移す（キーボード・読み上げで続けられる）
-  { const q = $("map"); if (q) { q.tabIndex = -1; q.focus({ preventScroll: true }); } }
+  // 画面を作り直すとフォーカスが body に戻るので、問題（山の名前・高さ・県）へ移す。手がかりを聞いてから選び肢へ進める（chikei-ate #3 の CodeRabbit）
+  { const q = $("qcard"); if (q) { q.tabIndex = -1; q.focus({ preventScroll: true }); } }
 }
 // ヒント1：その山の都道府県をぬって名前を出す。ヒント2：ちがう▲を2つ消して2つにしぼる
 // ヒント2：まちがいの選び肢を消して、2つにしぼる（消すのは、正解でない選び肢のうち最後の1つ以外。まちがいの数で変えない。
@@ -678,7 +678,7 @@ function paint() {
     if (ng) b.setAttribute("aria-label", `▲${+b.dataset.j + 1}（ちがう。${m.name}）`);
   });
   const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= 2; h.hidden = cur.done; }
-  $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(G.prefStr(A))}を黄色にぬりました。${cur.hints >= 2 ? "<br>💡 ちがう▲を消しました。のこりは2つです。" : ""}</div>` : "";
+  $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(G.prefStr(A))}を黄色にぬりました。${cur.hints >= 2 ? `<br>💡 ちがう▲を消しました。のこりは${cur.P.opts.filter((x) => !cutOf().includes(x) && !cur.wrong.includes(x)).length}つです。` : ""}</div>` : "";
 }
 function hint() { if (cur.done || cur.hints >= 2) return; cur.hints++; keep(); paint(); }
 function choose(j) {

@@ -9,6 +9,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
+import { checkSwStall } from "./sw-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -114,6 +115,8 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
   check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、外へ何も送らない", ["./index.html", "./data.js", "./map.js", "./game.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"].every((f) => shell.includes(f)) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "地形あて" && mf.icons.length >= 2 && mf.start_url === "./");
   check("PWA：maskable は字が切れないよう専用の絵（icon-maskable-512.png、中を縮めた絵）を使う", mf.icons.filter((i) => /maskable/.test(i.purpose || "")).every((i) => i.src === "icon-maskable-512.png") && existsSync(path.join(root, "icon-maskable-512.png"))); }
+{ const st = await checkSwStall(readFileSync(path.join(root, "sw.js"), "utf8"));
+  check("PWA：通信が途中で止まっても、4秒ほどで保存した画面に切りかえる（ふつうの通信はネットの返事のまま。shared-workflows template/qa/sw-check.mjs）", st.ok, `${st.stalled}/${st.normal}`); }
 
 // ---- 3. ブラウザで遊ぶ ----
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".webmanifest": "application/manifest+json" };
@@ -169,6 +172,12 @@ try {
     check("遊び方は Esc・「わかった」のその場で「見た」が残る（10回すぐ読み直す）", miss === 0, `${okNow}/10`);
   }
   check("ホームに日本の地図と、今日の5問・とことん・上級・練習・山の手帳のボタン", await p.locator(".hero svg path").count() >= 47 && (await Promise.all(["#go-d", "#go-e", "#go-h", "#go-p", "#go-dex", "#go-cal", "#go-ach"].map(async (q) => (await p.locator(q).count()) === 1 && (await p.locator(q).isVisible()) && (await p.locator(q).isEnabled())))).every(Boolean) && (await p.textContent("#go-d")).includes("今日の5問"));
+  {
+    await p.setViewportSize({ width: 390, height: 2400 }); // 縦長の画面（PC の縦置きなど）でも見る
+    const b = await p.evaluate(() => [...document.querySelectorAll("#app > *")].map((e) => [e.className, Math.round(e.getBoundingClientRect().height)]));
+    check("ホームの題は自分の高さだけ（縦長の画面で伸びて大きなすき間を作らない）", b[0][0] === "title" && b[0][1] < 90, JSON.stringify(b[0]));
+    await p.setViewportSize({ width: 390, height: 800 });
+  }
 
   // 地図：手がかりの都道府県の名前が出る（やさしい・ふつう）・むずかしいは出ない・▲は地図の中
   {

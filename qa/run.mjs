@@ -147,6 +147,18 @@ try {
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
   await p.reload(); await p.waitForTimeout(200);
   check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない（shared-workflows #186）", await p.locator("#howto[open]").count() === 0 && (await mem(p)).tut === true);
+  {
+    // Esc のその場（cancel）で残す：Esc の直後に読み直しても出ない（10回）。「わかった」も押したその場で残る（shared-workflows routines/game-dev.md「遊び方」）
+    let miss = 0, okNow = 0;
+    for (let t = 0; t < 10; t++) {
+      const q = await newPage();
+      if (t % 2 === 0) { await q.keyboard.press("Escape"); } else { await q.click("#howto-ok"); }
+      const tut = await q.evaluate(() => (JSON.parse(localStorage.getItem("chikei-v1") || "{}")).tut === true);
+      if (tut) okNow++; else miss++;
+      await q.context().close();
+    }
+    check("遊び方は Esc・「わかった」のその場で「見た」が残る（10回すぐ読み直す）", miss === 0, `${okNow}/10`);
+  }
   check("ホームに日本の地図と、今日の5問・とことん・上級・練習・山の手帳のボタン", await p.locator(".hero svg path").count() >= 47 && (await Promise.all(["#go-d", "#go-e", "#go-h", "#go-p", "#go-dex", "#go-cal", "#go-ach"].map(async (q) => (await p.locator(q).count()) === 1 && (await p.locator(q).isVisible()) && (await p.locator(q).isEnabled())))).every(Boolean) && (await p.textContent("#go-d")).includes("今日の5問"));
 
   // 地図：手がかりの都道府県の名前が出る（やさしい・ふつう）・むずかしいは出ない・▲は地図の中

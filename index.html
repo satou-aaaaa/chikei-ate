@@ -553,7 +553,10 @@ function bindFooter() { const h = $("f-how"); if (h) h.onclick = (e) => { e.prev
 function openHow() { $("fb2").href = FEEDBACK; const d = $("howto"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
 // 「わかった」でも Esc でも、閉じたら遊び方を見た印を残す（Esc では click が来ない。okane-kihon で見つかった。shared-workflows #186）
 // 「わかった」はすぐ保存する（close は少し遅れて届く）。close ではまだ保存していないときだけ保存する
-$("howto").addEventListener("close", () => { if (!load().tut) save((s) => { s.tut = true; }); });
+// 「見た」は Esc を押したその場（cancel）と閉じたとき（close）にも残す（close だけだと知らせが遅れ、すぐ読み直すとまた出る）
+const seenHow = () => { if (!load().tut) save((s) => { s.tut = true; }); };
+$("howto").addEventListener("cancel", seenHow);
+$("howto").addEventListener("close", seenHow);
 $("howto-ok").onclick = () => { save((s) => { s.tut = true; }); const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); };
 
 function home() {

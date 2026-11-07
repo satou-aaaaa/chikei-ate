@@ -3,7 +3,7 @@
 // とことん・山の手帳・実績・カレンダー・あとから・古いタブ・スマホ幅・PWA・引き継ぎコード・見やすさを確かめる。
 // 使い方: node qa/run.mjs   失敗があれば終了コード 1。結果は qa-report/report.md。
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,15 @@ const MAP = globalThis.CHIKEI_MAP;
   check("どの山にも名前・よみ・高さ・都道府県・場所・高さの種類がある", bad.length === 0, bad.slice(0, 5).map((m) => m.id).join(","));
   const rbad = G.M.filter((a) => a.rank !== 1 + G.M.filter((b) => b.e > a.e).length);
   check("高さの順位は「自分より高い山の数＋1」（同じ高さは同じ順位）", rbad.length === 0, rbad.slice(0, 5).map((m) => m.id).join(","));
+  {
+    // 元の表を新しい版に替えたとき、出典の版の日付（このゲームについて・README）も同じ版にそろえる（2026-11-07 CodeRabbit）
+    const files = readdirSync(path.join(root, "tools")).filter((f) => /^gsi-1003zan-\d{8}\.csv$/.test(f));
+    const d = files.length === 1 && files[0].match(/(\d{4})(\d{2})(\d{2})/);
+    const ver = d ? `${+d[1]}年${+d[2]}月${+d[3]}日版` : "";
+    const html = readFileSync(path.join(root, "index.html"), "utf8"), readme = readFileSync(path.join(root, "README.md"), "utf8");
+    const mk = readFileSync(path.join(root, "tools", "make-data.cjs"), "utf8");
+    check("元の表は1つだけで、出典の版（このゲームについて・README）と make-data.cjs の読むファイルが同じ版", ver && html.includes(ver) && readme.includes(ver) && mk.includes(files[0]) && !/\d{4}年\d{1,2}月\d{1,2}日版/.test(html.replaceAll(ver, "")), files.join(",") + " " + ver);
+  }
   check("都道府県の地図は47（どれにも形と名前の位置がある）", MAP.length === 47 && MAP.every((p) => /^M[\d.\s\-MZ]+Z$/.test(p.d) && p.l.length === 2));
 }
 {

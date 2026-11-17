@@ -24,7 +24,7 @@ QA_SHIFT_DAYS=24 node qa/run.mjs   # 日付・カレンダーを変えたとき�
 - ★はまちがい＋ヒントの数（0で★3・1で★2・2以上で★1）。まちがえた▲は、どの山かを教える（学べるように）。ヒントは2段（その山の都道府県をぬる → ちがう▲を消して2つにしぼる）。上級はヒントなし。時間制限は付けない。
 - 好きなだけ遊べる：チケット・回数制限・🔒で開くモードを入れない（2026-11-06 satou さん。QA が見る）。とことん（`runs.e`）は全部の山を1回ずつ、やさしい5→ふつう10→むずかしいの順で出し、まちがえても終わらず「ここで降りる」まで続く。自己ベスト `ebest`。他の人との順位は出さない。練習は地方を選べ、まだ当てていない山を先に出す。
 - 今日の5問・上級は1日1回で、途中で閉じても続きから。途中経過はモードごと（`runs.d`・`runs.h`・`runs.p`・`runs.e`・`runs["a:日付"]`）。答える前に、保存した進み具合が画面と同じ問題か確かめる（`same`）。ヒント・まちがいは別のタブの分を減らさない（`keep`）。保存の前に読み直し、`load` は合わせる前に両側を `fresh()` で補う。引き継ぎで入った記録は `tidy()` で形をそろえる（shared-workflows `incidents/2026-11-04-daily-game-save-gaps.md`）。
-- 実績（`ACH`、14個）はいまの記録から毎回数える（新しく残すのは知らせ終えた印 `ach` だけ）。続けるは合計の日数（`playedDays`）、連続の日は1以上のときだけ出す。取りこぼした日（きのう〜7日前・`EPOCH` から）はカレンダーからあとから遊べ、`adays` に入れて連続・今日の記録・Ko-fi・シェアには数えない。
+- 実績（`ACH`、16個）はいまの記録から毎回数える（新しく残すのは知らせ終えた印 `ach` だけ。「たしかの目」「覚えなおし」は depth.js の記録 `chikei-depth` から）。続けるは合計の日数（`playedDays`）、連続の日は1以上のときだけ出す。取りこぼした日（きのう〜7日前・`EPOCH` から）はカレンダーからあとから遊べ、`adays` に入れて連続・今日の記録・Ko-fi・シェアには数えない。
 - 山の手帳：当てた山（`dex`）を8つの地方ごとに。地方を押すと一覧と、その地方の練習。
 - 文字は少なめ・一画面一問。お笑いの言葉は入れない（QA が見る）。ほかの作品の名前・キャラ・見た目は使わない。
 - 共有は遊ぶ人が押したときに開くリンク（X・LINE・Web Share・コピー）だけ。シェアの文に山の名前（答え）を出さない（🟢🔶🔺）。
@@ -32,7 +32,8 @@ QA_SHIFT_DAYS=24 node qa/run.mjs   # 日付・カレンダーを変えたとき�
 - 応援は Ko-fi（https://ko-fi.com/satouaaaaa）へのただのリンクだけ。今日の5問・上級を初めて全部まちがいなしで終えたときだけ、結果の画面の下に1行。遊ぶのは無料のまま、有料版は置かない。
 - 外へ通信しない。外から読むのは Google Fonts の文字だけ（CSP の `connect-src 'self'` を広げない）。記録は遊ぶ人のブラウザ（localStorage）だけ。
 - 見やすさ：`</head>` の前の見やすさの設定（`<!-- a11y:begin -->`〜`end`）は shared-workflows `template/a11y/a11y.html` の写し、`qa/a11y.mjs` も `template/qa/a11y.mjs` の写しで、ここでは直さない。色だけで分けない（まちがいは ✕・破線・「ちがう」、正解は ✓、ぬった都道府県は「色の見分けを助ける」で斜線も重ねる）。ボタン ▲1〜▲4 は地図のどこかを読み上げる名前を持つ（答えは言わない）。
-- 引き継ぎ：`transfer.js` と `qa/transfer-check.mjs` は shared-workflows `template/` の写しで、ここでは直さない。`data-keys` は `chikei-v1`。記録の形を変えたら `fresh()` と QA の `sample` も合わせる。
+- 引き継ぎ：`transfer.js` と `qa/transfer-check.mjs` は shared-workflows `template/` の写しで、ここでは直さない。`data-keys` は `chikei-v1,chikei-depth`。記録の形を変えたら `fresh()` と QA の `sample` も合わせる。
+- 深さ：`depth.js` と `qa/depth-check.mjs` は shared-workflows `template/` の写しで、ここでは直さない（記録は `chikei-depth`）。答える前に「🎯 自信あり？」を押せる（`Depth.sureHtml`・`bindSure`・`judge`）。まちがえた・ヒントを使った山は復習（`runs.r`、問題の鍵は `tag`）に入り、1日後・3日後・7日後にもどる。復習は今日の記録・連続・Ko-fi・カレンダー・シェアに数えない。
 - 押せる所は高さ44px以上（QA が見る）。一行の式の途中にコメント `//` を足さない。少し遅れて動く処理（setTimeout）は、画面が替わっていたら何もしない。機能を足す・直すたびに `qa/run.mjs` に検査を足す。乱数で組む部分は何年分も作って確かめる（shared-workflows `incidents/2026-10-31-roppo-empty-village.md`）。
 - PWA（`manifest.webmanifest`・`sw.js`・`icon-*.png`）：画面のファイルを足したら `sw.js` の `SHELL` にも足し、中身を大きく変えたら `CACHE` の版を上げる。アイコンは `node tools/make-icons.cjs`（maskable は中を縮めた `icon-maskable-512.png`）、SNS 用の絵 `og.png` は `node tools/make-og.cjs`（今日の問題を入れない）。
 - 公開リポジトリなので、個人情報・鍵を入れない。

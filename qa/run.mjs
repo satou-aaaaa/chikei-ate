@@ -289,6 +289,7 @@ try {
     // 正解した直後（次へを押す前）でも「ここで降りる」で終われ、その1山が数に入る（前は cur.done のとき押しても何も起きなかった）
     const q = await newPage(); await closeHow(q);
     await q.click("#go-e"); await solve(q);
+    check("当てた直後の「ここで降りる」のボタンの数は、当てた1山を入れた数", (await q.textContent("#quit")).includes("1山で終える"), await q.textContent("#quit"));
     await q.click("#quit"); await q.waitForTimeout(150);
     check("とことんで正解した直後に「ここで降りる」を押すと結果の画面になり、当てた1山が数に入る", await q.locator("#eres").count() === 1 && (await q.textContent("#eres")).includes("1山") && (await mem(q)).ebest === 1 && !(await mem(q)).runs.e);
     await q.context().close();
@@ -447,6 +448,10 @@ try {
   const sample = { "chikei-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { 368: 1, 1: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }) };
   await checkTransfer({ browser, url, game: "chikei-ate", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+{ // 知らせ（.toast）は下のボタンを塞がない（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
+  const pt = await browser.newPage(); await pt.goto(url);
+  check("知らせ（.toast）が出ていても、その下のボタンを押せる（pointer-events:none）", await pt.evaluate(() => { const d = document.createElement("div"); d.className = "toast"; document.body.appendChild(d); const v = getComputedStyle(d).pointerEvents; d.remove(); return v === "none"; }));
+  await pt.close(); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));

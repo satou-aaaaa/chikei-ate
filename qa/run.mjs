@@ -286,6 +286,29 @@ try {
   await p.click("#go-e"); await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で終わり、自己ベスト（3山）とまちがい・ヒントの数が出る", (await mem(p)).ebest === 3 && (await p.textContent("#eres")).includes("3山") && (await p.textContent("#ebest")).includes("3回"));
   {
+    // 正解した直後（次へを押す前）でも「ここで降りる」で終われ、その1山が数に入る（前は cur.done のとき押しても何も起きなかった）
+    const q = await newPage(); await closeHow(q);
+    await q.click("#go-e"); await solve(q);
+    check("当てた直後の「ここで降りる」のボタンの数は、当てた1山を入れた数", (await q.textContent("#quit")).includes("1山で終える"), await q.textContent("#quit"));
+    await q.click("#quit"); await q.waitForTimeout(150);
+    check("とことんで正解した直後に「ここで降りる」を押すと結果の画面になり、当てた1山が数に入る", await q.locator("#eres").count() === 1 && (await q.textContent("#eres")).includes("1山") && (await mem(q)).ebest === 1 && !(await mem(q)).runs.e);
+    await q.context().close();
+  }
+  {
+    // 保存できないブラウザでは帯で知らせ、保存できるようになったら消す
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } }); await shift(ctx);
+    await ctx.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
+    const q = await newPage(390, ctx); await closeHow(q);
+    await q.click("#go-e"); await solve(q);
+    const n1 = await q.locator("#savewarn").count(); await q.waitForTimeout(2000);
+    const n2 = await q.locator("#savewarn").count();
+    check("保存に失敗すると、帯（#savewarn）がちょうど1つ出て、2秒たっても残る", n1 === 1 && n2 === 1, `${n1},${n2}`);
+    await q.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
+    await q.click("#next"); await solve(q);
+    check("保存できるようになったら、帯（#savewarn）が消える", await q.locator("#savewarn").count() === 0);
+    await ctx.close();
+  }
+  {
     // 引き継ぎコードなどで数の所に文字が入っても、画面に HTML として出さない
     const q = await newPage(); await closeHow(q);
     await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("chikei-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.dex = { 368: '"><b id="xss2">', bad: 3 }; s.runs = { e: { mode: "e", id: "x", date: "2026-11-08", list: ["0:368|e1:0"], res: [], miss: '"><i id="xss3">' }, h: { list: "bad", res: [] }, p: { mode: "p", id: "y", date: "2026-11-08", list: ["0:99999|p"], res: [] }, d: { mode: "d", id: "z", date: "x", list: ["0:368|d"], res: [] }, a1: { mode: "a", id: "a1", date: "2026-11-08", list: ["0:368|d"], res: [null] }, x: { mode: "x", id: "x1", date: "2026-11-08", list: ["0:368|d"], res: [{ m: 0 }] }, h2: { mode: "d", id: "h2", date: "2026-11-08", list: ["0:368|d"], res: [] }, "a:2026-11-08": { mode: "a", id: "a3", date: "2026-11-08", list: ["0:368|d", "1:368|d"], res: [{ m: 0 }], cur: { i: 1, tag: "1:368|d", wrong: "x", hints: 0 } } }; s.days = { "2026-11-08": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] }, "2026-11-09": { m: [] }, "2026-11-10": { m: [0, 0, 0] } }; s.hdays = { "2026-11-09": { m: [0, 1, 0] }, "2026-11-10": { m: [0, 0, 0, 0, 0] } }; localStorage.setItem("chikei-v1", JSON.stringify(s)); });
@@ -425,6 +448,10 @@ try {
   const sample = { "chikei-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { 368: 1, 1: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }) };
   await checkTransfer({ browser, url, game: "chikei-ate", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+{ // 知らせ（.toast）は下のボタンを塞がない（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
+  const pt = await browser.newPage(); await pt.goto(url);
+  check("知らせ（.toast）が出ていても、その下のボタンを押せる（pointer-events:none）", await pt.evaluate(() => { const d = document.createElement("div"); d.className = "toast"; document.body.appendChild(d); const v = getComputedStyle(d).pointerEvents; d.remove(); return v === "none"; }));
+  await pt.close(); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));

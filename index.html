@@ -159,7 +159,7 @@ dialog h2{margin:0 0 10px;letter-spacing:.1em}
 dialog ol{padding-left:1.3em;margin:0 0 12px;line-height:1.8}
 dialog p{margin:0 0 10px;font-size:14px;line-height:1.7;color:var(--ink2)}
 dialog a{color:var(--green2);min-height:44px;display:inline-flex;align-items:center}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center}
+.toast{pointer-events:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center}
 footer{margin-top:auto;text-align:center;font-size:12px;color:var(--ink2);display:flex;gap:4px 14px;justify-content:center;flex-wrap:wrap}
 footer a{color:var(--ink2);min-height:44px;display:inline-flex;align-items:center}
 /* 色の見分けを助ける：正解は青・まちがいは朱、ぬった都道府県は斜線も重ねる */
@@ -433,7 +433,8 @@ function tidy(s) {
   return s;
 }
 // 保存の前に読み直す（別のタブで進めた記録を消さない）
-function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; } return s; }
+function saveWarn(on) { let b = document.getElementById("savewarn"); const l = document.getElementById("msg"), W = "この端末に記録を保存できませんでした。ページを開き直すと、いまの記録が消えます"; if (!on) { if (b) { b.remove(); if (saveWarn.o) saveWarn.o.disconnect(); if (l && l.textContent.includes(W)) l.textContent = l.textContent.replace(W, "").replace(/^[。\s]+|[。\s]+$/g, ""); } return; } if (b) return; b = document.createElement("div"); b.id = "savewarn"; b.setAttribute("role", "status"); b.textContent = W; b.style.cssText = "position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#000;font-size:15px;line-height:1.5;text-align:center;pointer-events:none;border-bottom:2px solid #8a6d00"; (document.body || document.documentElement).prepend(b); if (l) { l.textContent = W; if (window.MutationObserver) { saveWarn.o = new MutationObserver(() => { if (document.getElementById("savewarn") && l.textContent && !l.textContent.includes(W)) l.textContent += "。" + W; }); saveWarn.o.observe(l, { childList: true, characterData: true, subtree: true }); } } } // 帯は画面のいちばん上に場所を取り（ボタンに重ならない）、#msg でも読み上げる。ほかの知らせで #msg が書き換わっても、保存できないあいだは警告を後ろに付け直す。保存できたら帯と #msg の警告を消す（黙って記録が消えないように・古い警告を読み上げないように）
+function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; saveWarn(false); } catch (e) { mem = j; saveWarn(true); } return s; }
 function streak(days) { let k = todayKey(), n = 0; if (!days[k]) k = prevDay(k); while (days[k]) { n++; k = prevDay(k); } return n; }
 const playedDays = (s) => new Set([...Object.keys(s.days), ...Object.keys(s.adays)]).size;
 const foundOf = (s) => Object.keys(s.dex).filter((k) => s.dex[k] > 0);
@@ -657,7 +658,7 @@ function play() {
   $("choices").onclick = (e) => { const b = e.target.closest(".ch"); if (b && !b.disabled) choose(+b.dataset.j); };
   $("map").onclick = (e) => { const g = e.target.closest(".mk"); if (g) { const b = document.querySelector(`.ch[data-j="${g.dataset.j}"]`); if (b && !b.disabled) choose(+g.dataset.j); } };
   if ($("hint")) $("hint").onclick = hint;
-  if ($("quit")) $("quit").onclick = () => { if (cur && cur.done) return; finish(); };
+  if ($("quit")) $("quit").onclick = () => finish();
   paint();
   toTop();
   // 画面を作り直すとフォーカスが body に戻るので、問題（山の名前・高さ・県）へ移す。手がかりを聞いてから選び肢へ進める（chikei-ate #3 の CodeRabbit）
@@ -699,6 +700,7 @@ function choose(j) {
   // 別のタブで使ったヒント・まちがいも数えてから採点する（keep と同じ合わせ方）
   const s = save((s) => { const r = s.runs[MODE]; if (!same(r)) return; const was = r.cur && r.cur.i === cur.i && r.cur.tag === cur.tag ? r.cur : { wrong: [], hints: 0 }; cur.hints = Math.max(cur.hints, num(was.hints)); for (const w of was.wrong || []) if (!cur.wrong.includes(w)) cur.wrong.push(w); r.res.push({ m: missOf() }); r.cur = null; if (r.mode === "e") { r.miss = (r.miss || 0) + missOf(); s.elast = P.ans; } s.dex[P.ans] = (s.dex[P.ans] || 0) + 1; });
   const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length, st = starsOf(missOf());
+  if ($("quit") && r && r.mode === "e") $("quit").textContent = `ここで降りる（${r.res.length}山で終える）`; // 正解した分も数える
   paint();
   $("msg").className = "msg"; $("msg").textContent = "";
   $("after").innerHTML = `<div class="verdict" role="status">

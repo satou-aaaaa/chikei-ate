@@ -15,6 +15,7 @@ import { checkDepth } from "./depth-check.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) });
+const firstClose = async (q) => { if (await q.locator("#howto[open]").count()) await q.click("#howto-ok"); if (await q.locator("#core-coach").count()) { await q.evaluate(() => Core.coach.leave()); await q.waitForTimeout(100); } }; // はじめての練習の吹き出しをやめてホームへ（sync-template の migrateFirstQa が足した）
 const req = createRequire(import.meta.url);
 const G = req(path.join(root, "game.js"));
 req(path.join(root, "map.js"));
@@ -144,7 +145,7 @@ async function newPage(w = 390, ctx) {
   return p;
 }
 const shift = (c) => c.addInitScript((ms) => { const n = Date.now; Date.now = () => n() + ms; }, SHIFT * 864e5);
-const closeHow = async (p) => { if (await p.locator("#howto[open]").count()) await p.click("#howto-ok"); };
+const closeHow = async (p) => { await firstClose(p); };
 const ansIdx = (p) => p.evaluate(() => { const c = __ca.cur(); return c.P.opts.indexOf(c.P.ans); });
 const wrongIdx = (p) => p.evaluate(() => { const c = __ca.cur(); return c.P.opts.findIndex((o) => o !== c.P.ans && !c.wrong.includes(o) && !document.querySelector(`.ch[data-j="${c.P.opts.indexOf(o)}"]`).disabled); });
 const mem = (p) => p.evaluate(() => JSON.parse(localStorage.getItem("chikei-v1") || "{}"));
@@ -156,7 +157,7 @@ async function solve(p, { wrong = 0 } = {}) {
 
 try {
   const p = await newPage();
-  check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
+  check("はじめて開くと遊び方が出る", await p.locator("#core-coach").count() === 1);
   await p.keyboard.press("Escape"); await p.waitForTimeout(100);
   await p.reload(); await p.waitForTimeout(200);
   check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない（shared-workflows #186）", await p.locator("#howto[open]").count() === 0 && (await mem(p)).tut === true);
@@ -165,7 +166,7 @@ try {
     let miss = 0, okNow = 0;
     for (let t = 0; t < 10; t++) {
       const q = await newPage();
-      if (t % 2 === 0) { await q.keyboard.press("Escape"); } else { await q.click("#howto-ok"); }
+      if (t % 2 === 0) { await q.keyboard.press("Escape"); } else { await firstClose(q); }
       const tut = await q.evaluate(() => (JSON.parse(localStorage.getItem("chikei-v1") || "{}")).tut === true);
       if (tut) okNow++; else miss++;
       await q.context().close();
@@ -510,7 +511,7 @@ try {
 // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
 try {
   const sample = { "chikei-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { 368: 1, 1: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }), "chikei-depth": JSON.stringify({ v: 1, rv: { "1:368|x1": { s: 1, due: "2026-11-20", t: 5 } } }) }; // 復習の記録も引き継ぐかを見る
-  await checkTransfer({ browser, url, game: "chikei-ate", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
+  await checkTransfer({ browser, url, game: "chikei-ate", sample, check, open: async (pg) => { await firstClose(pg); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
 { // 知らせ（.toast）は下のボタンを塞がない（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
   const pt = await browser.newPage(); await pt.goto(url);
